@@ -1,7 +1,5 @@
 use std::collections::HashSet;
 
-use itertools::Itertools;
-
 use crate::TaskCompleter;
 
 pub struct Task2;

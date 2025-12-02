@@ -1,5 +1,3 @@
-use std::u32;
-
 use crate::TaskCompleter;
 
 pub struct Task1;
@@ -40,7 +38,7 @@ impl Dial {
     fn rotate_right(&mut self, amount: i32) -> i32 {
         let full_rotations = amount / 100;
         let remainder = amount % 100;
-        let start = self.position;
+        // let start = self.position;
         self.position = self.position + remainder;
         let extra = if remainder > 0 {
             if self.position == 0 {
