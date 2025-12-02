@@ -1,0 +1,9 @@
+[package]
+name = "advent_of_code_2025"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+itertools = "0.14.0"
+strum = "0.27.2"
+strum_macros = "0.27.2"
