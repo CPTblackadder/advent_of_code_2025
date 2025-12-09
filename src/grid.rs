@@ -1,4 +1,8 @@
 use itertools::Itertools;
+use par_iter::iter::{
+    IndexedParallelIterator, ParallelIterator,
+    plumbing::{Producer, bridge},
+};
 use std::{
     fmt::Display,
     ops::{Add, AddAssign, Index, IndexMut, Sub},
@@ -14,12 +18,139 @@ pub struct Grid<T> {
 pub struct GridIter<'a, T> {
     grid: &'a Grid<T>,
     coord: Coord,
+    starting_coord: Option<Coord>,
+    ending_coord: Option<Coord>,
+}
+
+impl<'a, T> ParallelIterator for GridIter<'a, T>
+where
+    &'a Grid<T>: Send,
+    &'a T: Send,
+{
+    type Item = (Coord, &'a T);
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: par_iter::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        bridge(self, consumer)
+    }
+
+    fn opt_len(&self) -> Option<usize> {
+        Some(IndexedParallelIterator::len(self))
+    }
+}
+
+impl<'a, T> IndexedParallelIterator for GridIter<'a, T>
+where
+    &'a Grid<T>: Send,
+    &'a T: Send,
+{
+    fn len(&self) -> usize {
+        if let Some(starting_coord) = self.starting_coord
+            && let Some(ending_coord) = self.ending_coord
+        {
+            (((ending_coord.1 - starting_coord.1) * self.grid.width() as i64) + ending_coord.0
+                - starting_coord.0) as usize
+        } else {
+            self.grid.height() * self.grid.width()
+        }
+    }
+
+    fn drive<C: par_iter::iter::plumbing::Consumer<Self::Item>>(self, consumer: C) -> C::Result {
+        bridge(self, consumer)
+    }
+
+    fn with_producer<CB: par_iter::iter::plumbing::ProducerCallback<Self::Item>>(
+        self,
+        callback: CB,
+    ) -> CB::Output {
+        let producer = CoordProducer::from(self);
+        callback.callback(producer)
+    }
+}
+
+struct CoordProducer<'a, T> {
+    grid: &'a Grid<T>,
+    starting_coord: Coord,
+    ending_coord: Coord,
+}
+
+impl<'a, T> From<GridIter<'a, T>> for CoordProducer<'a, T> {
+    fn from(value: GridIter<'a, T>) -> Self {
+        Self {
+            grid: value.grid,
+            starting_coord: Coord(0, 0),
+            ending_coord: Coord(value.grid.height() as i64, value.grid.width() as i64),
+        }
+    }
+}
+
+impl<'a, T> Producer for CoordProducer<'a, T>
+where
+    &'a Grid<T>: Send,
+    &'a T: Send,
+{
+    type Item = (Coord, &'a T);
+
+    type IntoIter = GridIter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        GridIter {
+            grid: self.grid,
+            coord: self.starting_coord,
+            starting_coord: Some(self.starting_coord),
+            ending_coord: Some(self.ending_coord),
+        }
+    }
+
+    fn split_at(self, index: usize) -> (Self, Self) {
+        let middle_coord = self.starting_coord.advance(index, self.grid).unwrap();
+        assert!(middle_coord < self.ending_coord);
+        (
+            Self {
+                grid: self.grid,
+                starting_coord: self.starting_coord,
+                ending_coord: middle_coord,
+            },
+            Self {
+                grid: self.grid,
+                starting_coord: middle_coord,
+                ending_coord: self.ending_coord,
+            },
+        )
+    }
+}
+
+impl<'a, T> ExactSizeIterator for GridIter<'a, T> {}
+
+impl<'a, T> DoubleEndedIterator for GridIter<'a, T> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if Some(self.coord) < self.starting_coord {
+            return None;
+        }
+        if self.coord.0 == 0 {
+            self.coord = Coord::new(self.grid.width() as i64 - 1, self.coord.1 - 1);
+        }
+        if self.coord.1 == 0 {
+            None
+        } else {
+            let coord = self.coord;
+            let ret = &self.grid[self.coord];
+            self.coord = Coord::new(self.coord.0 - 1, self.coord.1);
+
+            Some((coord, ret))
+        }
+    }
 }
 
 impl<'a, T> Iterator for GridIter<'a, T> {
     type Item = (Coord, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
+        if Some(self.coord) >= self.ending_coord {
+            return None;
+        }
         if self.coord.0 >= self.grid.width() as i64 {
             self.coord = Coord::new(0, self.coord.1 + 1);
         }
@@ -129,6 +260,7 @@ impl<T> Grid<T> {
         self.g.len()
     }
 
+    /// Returns Some(d) if coord is in bounds, otherwise returns None
     pub fn in_bounds(&self, d: Coord) -> Option<Coord> {
         if d.0 >= 0 && d.0 < self.width() as i64 && d.1 >= 0 && d.1 < self.height() as i64 {
             Some(d)
@@ -145,6 +277,8 @@ impl<T> Grid<T> {
         GridIter {
             grid: self,
             coord: Coord::new(0, 0),
+            starting_coord: None,
+            ending_coord: None,
         }
     }
 
@@ -265,6 +399,14 @@ impl Coord {
         }
     }
 
+    pub fn squared_len(&self) -> i64 {
+        self.0 * self.0 + self.1 * self.1
+    }
+
+    pub fn len(&self) -> i64 {
+        (self.0 * self.0 + self.1 * self.1).isqrt()
+    }
+
     pub fn get_bounded_neighbours<T>(&self, grid: &Grid<T>, diagnols: bool) -> Vec<Coord> {
         if diagnols {
             vec![
@@ -308,14 +450,18 @@ impl Coord {
         if rhs.0 % self.0 == 0 && rhs.1 % self.1 == 0 {
             let a = rhs.0 / self.0;
             let b = rhs.1 / self.1;
-            if a == b {
-                Some(a)
-            } else {
-                None
-            }
+            if a == b { Some(a) } else { None }
         } else {
             None
         }
+    }
+
+    fn advance<'a, T>(&self, index: usize, grid: &'a Grid<T>) -> Option<Self> {
+        let index = index as i64;
+        let new_x = (self.0 + index) % grid.width() as i64;
+        let new_y = self.1 + ((self.0 + index) / grid.width() as i64);
+        let new_coord = Self(new_x, new_y);
+        grid.in_bounds(new_coord)
     }
 }
 
