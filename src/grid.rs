@@ -377,7 +377,7 @@ impl Coord {
         (self.0.abs_diff(dest.0) + self.1.abs_diff(dest.1)) as i64
     }
 
-    fn get_neighbours(&self, diagnols: bool) -> Vec<Coord> {
+    pub(crate) fn get_neighbours(&self, diagnols: bool) -> Vec<Coord> {
         if diagnols {
             vec![
                 Coord::new(self.0, self.1 + 1),
@@ -405,6 +405,19 @@ impl Coord {
 
     pub fn len(&self) -> i64 {
         (self.0 * self.0 + self.1 * self.1).isqrt()
+    }
+
+    pub fn square_distance(&self, y: &Coord) -> i64 {
+        (self.0.abs_diff(y.0).pow(2) + self.1.abs_diff(y.1).pow(2))
+            .try_into()
+            .unwrap()
+    }
+
+    pub fn distance(&self, y: &Coord) -> i64 {
+        (self.0.abs_diff(y.0).pow(2) + self.1.abs_diff(y.1).pow(2))
+            .isqrt()
+            .try_into()
+            .unwrap()
     }
 
     pub fn get_bounded_neighbours<T>(&self, grid: &Grid<T>, diagnols: bool) -> Vec<Coord> {

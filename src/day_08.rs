@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::zip};
+use std::{collections::HashMap};
 
 use itertools::Itertools;
 
@@ -79,7 +79,7 @@ impl TaskCompleter for Task8 {
         let pairs = coords
             .clone()
             .cartesian_product(coords.clone())
-            .sorted_by_key(|((x, x_i), (y, y_i))| {
+            .sorted_by_key(|((x, _), (y, _))| {
                 (x.0 - y.0).pow(2) + (x.1 - y.1).pow(2) + (x.2 - y.2).pow(2)
             })
             .filter(|(x, y)| x < y);

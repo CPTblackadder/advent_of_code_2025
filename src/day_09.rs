@@ -1,10 +1,29 @@
-use std::i64;
+use std::{fmt::Display, i64};
 
 use itertools::Itertools;
 
-use crate::{TaskCompleter, grid::Coord};
+use crate::{TaskCompleter, grid::Coord, sparsegrid::SparseGrid};
 
 pub struct Task9;
+
+#[derive(Clone, Default, PartialEq, Eq, Debug)]
+enum GridSpace {
+    #[default]
+    Inside,
+    Border,
+    Outside,
+}
+
+impl Display for GridSpace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            GridSpace::Inside => "O",
+            GridSpace::Border => "X",
+            GridSpace::Outside => ".",
+        };
+        f.write_str(&str)
+    }
+}
 
 impl TaskCompleter for Task9 {
     fn do_task_1(&self) -> String {
@@ -17,52 +36,80 @@ impl TaskCompleter for Task9 {
                 Coord::new(x, y)
             })
             .collect_vec();
-        let max_x = coords.iter().map(|x| x.x()).max().unwrap();
-        let max_y = coords.iter().map(|x| x.y()).max().unwrap();
-        let highest_possible_top_left = Coord::new(0, max_y);
-        let highest_possible_bottom_right = Coord::new(max_x, 0);
-        let mut top_left = highest_possible_bottom_right;
-        let mut bottom_right = highest_possible_top_left;
-        let highest_possible_bottom_left = Coord::new(0, 0);
-        let highest_possible_top_right = Coord::new(max_x, max_y);
-        let mut bottom_left = highest_possible_bottom_right;
-        let mut top_right = highest_possible_top_left;
-
-        for c in coords {
-            if (highest_possible_top_left - c).squared_len()
-                < (highest_possible_top_left - top_left).squared_len()
-            {
-                top_left = c;
-            } else if (highest_possible_bottom_right - c).squared_len()
-                < (highest_possible_bottom_right - bottom_right).squared_len()
-            {
-                bottom_right = c;
-            } else if (highest_possible_bottom_left - c).squared_len()
-                < (highest_possible_bottom_left - bottom_left).squared_len()
-            {
-                bottom_left = c;
-            } else if (highest_possible_top_right - c).squared_len()
-                < (highest_possible_top_right - top_right).squared_len()
-            {
-                top_right = c;
-            }
-        }
-        dbg!(&bottom_left);
-        dbg!(&bottom_right);
-        dbg!(&top_left);
-        dbg!(&top_right);
-
-        ((bottom_right.x() + 1 - top_left.x()) * (top_left.y() + 1 - bottom_right.y()))
-            .max((top_right.x() + 1 - bottom_left.x()) * (top_right.y() + 1 - bottom_left.y()))
+        coords
+            .iter()
+            .cartesian_product(coords.iter())
+            .map(|(x, y)| (x.x().abs_diff(y.x()) + 1) * (x.y().abs_diff(y.y()) + 1))
+            .max()
+            .unwrap()
             .to_string()
     }
 
     fn do_task_2(&self) -> String {
-        "".to_string()
+        let coords = include_str!("../input/day_09/input")
+            .lines()
+            .map(|x| {
+                let mut s = x.split(",");
+                let x = s.next().unwrap().parse::<i64>().unwrap();
+                let y = s.next().unwrap().parse::<i64>().unwrap();
+                Coord::new(x, y)
+            })
+            .collect_vec();
+        let max_x = coords.iter().map(|x| x.x()).max().unwrap();
+        let max_y = coords.iter().map(|x| x.y()).max().unwrap();
+
+        let mut grid: SparseGrid<GridSpace> =
+            SparseGrid::default_with_size((max_x as usize + 2, max_y as usize + 2), (100, 100));
+        for (x, y) in coords
+            .iter()
+            .zip(coords.iter().skip(1))
+            .chain([(coords.last().unwrap(), &coords[0])])
+        {
+            if x.x() == y.x() {
+                let higher = x.y().max(y.y());
+                let lower = x.y().min(y.y());
+                for i in lower..higher + 1 {
+                    grid.set(Coord::new(x.x(), i), GridSpace::Border);
+                }
+            } else {
+                assert_eq!(x.y(), y.y());
+                let higher = x.x().max(y.x());
+                let lower = x.x().min(y.x());
+                for i in lower..higher + 1 {
+                    grid.set(Coord::new(i, x.y()), GridSpace::Border);
+                }
+            }
+        }
+
+        grid.do_flood_fill(Coord::new(0, 0), GridSpace::Outside, GridSpace::Inside);
+
+        let (x, y) = coords
+            .iter()
+            .cartesian_product(coords.iter())
+            .sorted_by_key(|(x, y)| (x.x().abs_diff(y.x()) + 1) * (x.y().abs_diff(y.y()) + 1))
+            .rev()
+            .filter(|(x, y)| {
+                let mut xs = [x.x(), y.x()];
+                let mut ys = [x.y(), y.y()];
+                xs.sort();
+                ys.sort();
+                let [x_0, x_1] = xs;
+                let [y_0, y_1] = ys;
+                (x_0..x_1).all(|x| {
+                    grid[Coord::new(x, y_0)] != GridSpace::Outside
+                        && grid[Coord::new(x, y_1)] != GridSpace::Outside
+                }) && (y_0..y_1).all(|y| {
+                    grid[Coord::new(x_0, y)] != GridSpace::Outside
+                        && grid[Coord::new(x_1, y)] != GridSpace::Outside
+                })
+            })
+            .next()
+            .unwrap();
+        ((x.x().abs_diff(y.x()) + 1) * (x.y().abs_diff(y.y()) + 1)).to_string()
     }
 
     fn task_1_result(&self) -> Option<String> {
-        None
+        Some(4760959496i64.to_string())
     }
 
     fn task_2_result(&self) -> Option<String> {

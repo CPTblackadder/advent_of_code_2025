@@ -31,6 +31,7 @@ mod day_10;
 mod day_11;
 mod day_12;
 mod grid;
+mod sparsegrid;
 
 pub trait TaskCompleter {
     fn get_name_auto(&self) -> String {
