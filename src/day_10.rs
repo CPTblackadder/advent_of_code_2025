@@ -3,6 +3,8 @@ use std::collections::VecDeque;
 use crate::TaskCompleter;
 use itertools::Itertools;
 
+use microlp::{ComparisonOp, OptimizationDirection, Problem};
+
 pub struct Task10;
 
 struct Machine {
@@ -59,7 +61,34 @@ impl Machine {
                 queue.push_back((new_state, presses + 1));
             }
         }
-        todo!()
+        panic!("No answer possible, in a real program you'd return an option or some shit")
+    }
+
+    fn solve_for_joltage(&self) -> i64 {
+        let mut problem = Problem::new(OptimizationDirection::Minimize);
+        let button_variables = self
+            .buttons
+            .iter()
+            .map(|_| problem.add_integer_var(1.0, (0, i32::MAX)))
+            .collect_vec();
+
+        for (light_index, desired_joltage) in self.joltage.iter().enumerate() {
+            problem.add_constraint(
+                self.buttons.iter().enumerate().filter_map(|(i, x)| {
+                    if x.contains(&light_index) {
+                        Some((button_variables[i], 1.0))
+                    } else {
+                        None
+                    }
+                }),
+                ComparisonOp::Eq,
+                *desired_joltage as f64,
+            );
+        }
+
+        let solution = problem.solve().unwrap();
+
+        solution.objective().round() as i64
     }
 }
 
@@ -81,7 +110,11 @@ impl TaskCompleter for Task10 {
     }
 
     fn do_task_2(&self) -> String {
-        "".to_string()
+        include_str!("../input/day_10/input")
+            .lines()
+            .map(|x| Machine::from_string(x).solve_for_joltage())
+            .sum::<i64>()
+            .to_string()
     }
 
     fn task_1_result(&self) -> Option<String> {
