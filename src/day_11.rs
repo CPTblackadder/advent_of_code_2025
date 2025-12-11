@@ -144,7 +144,6 @@ impl TaskCompleter for Task11 {
                 reversed_connections[*j].push(i);
             }
         }
-        println!("start compute out");
         let paths_to_out = get_no_paths_to_from_each_1(
             name_map["out"],
             &connections,
@@ -152,7 +151,6 @@ impl TaskCompleter for Task11 {
             &name_map,
         );
         assert_eq!(self.do_task_1(), paths_to_out[name_map["you"]].to_string());
-        println!("start compute dac");
 
         let paths_to_dac = get_no_paths_to_from_each_1(
             name_map["dac"],
@@ -160,7 +158,6 @@ impl TaskCompleter for Task11 {
             &reversed_connections,
             &name_map,
         );
-        println!("start compute fft");
 
         let paths_to_fft = get_no_paths_to_from_each_1(
             name_map["fft"],
@@ -179,10 +176,10 @@ impl TaskCompleter for Task11 {
     }
 
     fn task_1_result(&self) -> Option<String> {
-        None
+        Some(534.to_string())
     }
 
     fn task_2_result(&self) -> Option<String> {
-        None
+        Some(499645520864100i64.to_string())
     }
 }
